@@ -1,3 +1,5 @@
+# Csv.Decode
+
 CSV decoding, heavily inspired by [url-parser][].
 
 Note this library does not include an underlying CSV parser. It assumes you 
