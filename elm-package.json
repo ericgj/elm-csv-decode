@@ -1,5 +1,5 @@
 {
-    "version": "1.0.1",
+    "version": "2.0.0",
     "summary": "Decode CSV records to types",
     "repository": "https://github.com/ericgj/elm-csv-decode.git",
     "license": "BSD3",

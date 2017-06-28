@@ -6,7 +6,7 @@ module Csv.Decode exposing
     , decodeCsv
     , next, field
     , assertNext, assertField
-    , (</>)
+    , andMap
     , oneOf
     , map
     , maybe
@@ -38,7 +38,7 @@ examples below.
 @docs next, field, assertNext, assertField, maybe
 
 # Combining
-@docs (</>), oneOf, map
+@docs andMap, oneOf, map
 
 # Errors
 @docs Errors
@@ -138,8 +138,8 @@ header-based decoding.
     decodeCoordinates =
         map Coordinates
             ( next String.toFloat
-                </> next String.toFloat
-                </> next String.toFloat
+                |> andMap (next String.toFloat)
+                |> andMap (next String.toFloat)
             )
 -}
 next : (String -> Result String a) -> Decoder (a -> b) b
@@ -172,8 +172,8 @@ source fields map to more than one target field.
     decodeNutrition =
         map Nutrition
             ( field "name" Ok
-                </> field "calories"  String.toInt
-                </> field "protein" String.toFloat
+                |> andMap (field "calories"  String.toInt)
+                |> andMap (field "protein" String.toFloat)
             )
 
 Note that position- and header-based decoding can be combined, but it is not
@@ -212,12 +212,12 @@ For example:
         oneOf
             [ map Letter
                   ( assertNext "LETTER"
-                      </> next String.toFloat
+                      |> andMap (next String.toFloat)
                   )
             , map Parcel
                   ( assertNext "PARCEL"
-                      </> next String.toFloat
-                      </> next parseDimensions
+                      |> andMap (next String.toFloat)
+                      |> andMap (next parseDimensions)
                   )
             ]
 
@@ -254,12 +254,12 @@ The same example above, but for header-based decoding:
         oneOf
             [ map Letter
                   ( assertField "type" "LETTER"
-                      </> field "weight" String.toFloat
+                      |> andMap (field "weight" String.toFloat)
                   )
             , map Parcel
                   ( assertField "type" "PARCEL"
-                      </> field "weight" String.toFloat
-                      </> field "dimensions"  parseDimensions
+                      |> andMap (field "weight" String.toFloat)
+                      |> andMap (field "dimensions"  parseDimensions)
                   )
             ]
 
@@ -284,7 +284,7 @@ Decode multiple fields.
 
     decodeCsv 
         (assertField "site" "blog" 
-            </> field "id" String.toInt
+            |> andMap (field "id" String.toInt)
         ) 
         data
    
@@ -293,12 +293,11 @@ Decode multiple fields.
     -- }   ==>  Ok [35]
     
 -}
-(</>) : Decoder a b -> Decoder b c -> Decoder a c
-(</>) (Decoder decodeBefore) (Decoder decodeAfter) =
+andMap : Decoder b c -> Decoder a b -> Decoder a c
+andMap (Decoder decodeAfter) (Decoder decodeBefore) =
     Decoder <|
         \state ->
             Result.andThen decodeAfter (decodeBefore state)
-infixr 7 </>
 
 
 {-|
@@ -334,7 +333,7 @@ Typically used to feed a bunch of parsed state into a type constructor.
     
     decodeRawComment : Decoder (String -> Int -> a) a
     decodeRawComment =
-        field "author" Ok </> field "id" String.toInt
+        field "author" Ok |> andMap (field "id" String.toInt)
 
     decodeComment : Decoder (Comment -> a) a
     decodeComment =
@@ -374,7 +373,7 @@ Useful when you have optional fields.
     decodeLetter =
         map Letter
             ( field "weight" String.toFloat
-                </> field "insurance"  (maybe parseCurrencyAmount)
+                |> andMap (field "insurance"  (maybe parseCurrencyAmount))
             )
 
 -}
