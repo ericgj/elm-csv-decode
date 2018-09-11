@@ -1,18 +1,13 @@
 module Csv.Decode exposing
-    ( Csv
-    , Decoder
+    ( Csv, Decoder
+    , decode, decodeCsv
+    , next, field, assertNext, assertField, maybe
+    , andMap, oneOf, map
     , Errors(..)
-    , decode
-    , decodeCsv
-    , next, field
-    , assertNext, assertField
-    , andMap
-    , oneOf
-    , map
-    , maybe
     )
 
 {-|
+
 
 ## Basic usage
 
@@ -24,23 +19,32 @@ Using `lovasoa/elm-csv` (which returns a plain `Csv`):
 
     Csv.parse rawData |> Csv.Decode.decodeCsv myDecoder
 
-You can define decoders based on field position or on header name. See 
+You can define decoders based on field position or on header name. See
 examples below.
 
 
 # Types
+
 @docs Csv, Decoder
 
+
 # Running
+
 @docs decode, decodeCsv
 
+
 # Defining
+
 @docs next, field, assertNext, assertField, maybe
 
+
 # Combining
+
 @docs andMap, oneOf, map
 
+
 # Errors
+
 @docs Errors
 
 -}
@@ -48,9 +52,7 @@ examples below.
 import Tuple
 
 
-{-|
-The raw CSV data structure.
-
+{-| The raw CSV data structure.
 -}
 type alias Csv =
     { headers : List String
@@ -58,9 +60,7 @@ type alias Csv =
     }
 
 
-{-|
-A value that encapsulates how to decode CSV records (`List String`)
-
+{-| A value that encapsulates how to decode CSV records (`List String`)
 -}
 type Decoder a b
     = Decoder (State a -> Result String (State b))
@@ -73,11 +73,10 @@ type alias State value =
     }
 
 
-{-|
-Errors can either be
+{-| Errors can either be
 
-  1. Errors passed through from the underlying CSV parsing (`CsvErrors`), or
-  2. Errors in decoding a list of parsed records to models (`DecodeErrors`)
+1.  Errors passed through from the underlying CSV parsing (`CsvErrors`), or
+2.  Errors in decoding a list of parsed records to models (`DecodeErrors`)
 
 Note that the latter reports the record index together with the error message.
 
@@ -87,8 +86,7 @@ type Errors
     | DecodeErrors (List ( Int, String ))
 
 
-{-|
-Decode the raw result of CSV parsing.
+{-| Decode the raw result of CSV parsing.
 
 Typically you chain them together like this (using `periodic/elm-csv`):
 
@@ -100,8 +98,7 @@ decode decoder =
     Result.mapError CsvErrors >> Result.andThen (decodeCsv decoder)
 
 
-{-|
-Decode raw CSV data.
+{-| Decode raw CSV data.
 
 This is useful if you already have a `Csv` structure not
 wrapped in a `Result`, for instance `lovasoa/elm-csv` parses CSV strings this
@@ -117,16 +114,15 @@ decodeCsv decoder { headers, records } =
 
 decodeRecord : Decoder (a -> a) a -> List String -> List String -> Result String a
 decodeRecord (Decoder decoder) headers record =
-    (Result.map .value) <|
+    Result.map .value <|
         decoder <|
             { visited = []
-            , unvisited = List.map2 (,) headers record
+            , unvisited = List.map2 (\a b -> ( a, b )) headers record
             , value = identity
             }
 
 
-{-|
-Decode the next field from the input: positional decoding.
+{-| Decode the next field from the input: positional decoding.
 
 Use this when you are certain of the order of the fields. It is faster than
 header-based decoding.
@@ -141,6 +137,7 @@ header-based decoding.
                 |> andMap (next String.toFloat)
                 |> andMap (next String.toFloat)
             )
+
 -}
 next : (String -> Result String a) -> Decoder (a -> b) b
 next fn =
@@ -159,8 +156,7 @@ next fn =
                             Err msg
 
 
-{-|
-Decode the named field from the input: header-based decoding.
+{-| Decode the named field from the input: header-based decoding.
 
 Use this when you do not want to rely on the order of the fields, or when your
 source fields map to more than one target field.
@@ -184,7 +180,7 @@ field : String -> (String -> Result String a) -> Decoder (a -> b) b
 field name fn =
     Decoder <|
         \{ visited, unvisited, value } ->
-            case (listFind (\( name_, _ ) -> name_ == name) unvisited) of
+            case listFind (\( name_, _ ) -> name_ == name) unvisited of
                 Nothing ->
                     Err ("No field named '" ++ name ++ "' found")
 
@@ -197,8 +193,7 @@ field name fn =
                             Err msg
 
 
-{-|
-Decode the next field if it matches the given string.
+{-| Decode the next field if it matches the given string.
 
 This can be useful to decode a union type based on a field of the CSV.
 For example:
@@ -236,12 +231,12 @@ assertNext expected =
                 ( rawField, rawValue ) :: rest ->
                     if rawValue == expected then
                         Ok <| State (( rawField, rawValue ) :: visited) rest value
+
                     else
                         Err ("Expected '" ++ expected ++ "', was '" ++ rawValue ++ "'")
 
 
-{-|
-Decode a named field if it matches the given string.
+{-| Decode a named field if it matches the given string.
 
 The same example above, but for header-based decoding:
 
@@ -268,30 +263,31 @@ assertField : String -> String -> Decoder a a
 assertField name expected =
     Decoder <|
         \{ visited, unvisited, value } ->
-            case (listFind (\( name_, _ ) -> name_ == name) unvisited) of
+            case listFind (\( name_, _ ) -> name_ == name) unvisited of
                 Nothing ->
                     Err ("No field named '" ++ name ++ "' found")
 
                 Just ( rawField, rawValue ) ->
                     if rawValue == expected then
                         Ok <| State visited unvisited value
+
                     else
                         Err ("Expected '" ++ expected ++ "', was '" ++ rawValue ++ "'")
 
 
-{-|
-Decode multiple fields.
+{-| Decode multiple fields.
 
-    decodeCsv 
-        (assertField "site" "blog" 
+    decodeCsv
+        (assertField "site" "blog"
             |> andMap (field "id" String.toInt)
-        ) 
+        )
         data
-   
+
     -- { headers = [ "site", "id" ]
-    -- , records = [["blog","35"]] 
+    -- , records = [["blog","35"]]
     -- }   ==>  Ok [35]
-    
+
+
 -}
 andMap : Decoder b c -> Decoder a b -> Decoder a c
 andMap (Decoder decodeAfter) (Decoder decodeBefore) =
@@ -300,8 +296,7 @@ andMap (Decoder decodeAfter) (Decoder decodeBefore) =
             Result.andThen decodeAfter (decodeBefore state)
 
 
-{-|
-Try a bunch of different decoders, using the first one that succeeds.
+{-| Try a bunch of different decoders, using the first one that succeeds.
 
     type IntOrFloat
        = Int_ Int
@@ -319,18 +314,16 @@ oneOf : List (Decoder a b) -> Decoder a b
 oneOf decoders =
     Decoder <|
         \state ->
-            (listFindOk (\(Decoder p) -> p state) decoders
+            listFindOk (\(Decoder p) -> p state) decoders
                 |> Maybe.withDefault (Err "No decoders succeeded")
-            )
 
 
-{-|
-Transform a decoder.
+{-| Transform a decoder.
 
 Typically used to feed a bunch of parsed state into a type constructor.
 
     type alias Comment = { author : String, id : Int }
-    
+
     decodeRawComment : Decoder (String -> Int -> a) a
     decodeRawComment =
         field "author" Ok |> andMap (field "id" String.toInt)
@@ -338,7 +331,8 @@ Typically used to feed a bunch of parsed state into a type constructor.
     decodeComment : Decoder (Comment -> a) a
     decodeComment =
         map Comment decodeRawComment
-        
+
+
 -}
 map : a -> Decoder a b -> Decoder (b -> c) c
 map subValue (Decoder decoder) =
@@ -360,8 +354,7 @@ mapHelp fn { visited, unvisited, value } =
     }
 
 
-{-|
-A convenience function for converting empty strings to `Nothing`.
+{-| A convenience function for converting empty strings to `Nothing`.
 Useful when you have optional fields.
 
     type alias Letter =
@@ -381,9 +374,10 @@ maybe : (String -> Result String a) -> (String -> Result String (Maybe a))
 maybe fn =
     \s ->
         if s == "" then
-            (Ok Nothing)
+            Ok Nothing
+
         else
-            (fn s |> Result.map Just)
+            fn s |> Result.map Just
 
 
 
@@ -393,8 +387,8 @@ maybe fn =
 sequenceResultsAccumErrs : List (Result e a) -> Result (List ( Int, e )) (List a)
 sequenceResultsAccumErrs list =
     let
-        accum next ( i, result ) =
-            case ( next, result ) of
+        accum nxt ( i, result ) =
+            case ( nxt, result ) of
                 ( Ok b, Ok a ) ->
                     ( i - 1, Ok (b :: a) )
 
@@ -407,7 +401,7 @@ sequenceResultsAccumErrs list =
                 ( Err b, Err a ) ->
                     ( i - 1, Err (( i, b ) :: a) )
     in
-        List.foldr accum ( (List.length list - 1), Ok [] ) list |> Tuple.second
+    List.foldr accum ( List.length list - 1, Ok [] ) list |> Tuple.second
 
 
 
@@ -423,6 +417,7 @@ listFind pred list =
         first :: rest ->
             if pred first then
                 Just first
+
             else
                 listFind pred rest
 
@@ -440,4 +435,3 @@ listFindOk fn list =
 
                 Err e ->
                     listFindOk fn rest
-
